@@ -168,7 +168,14 @@ class MultiCrossEntropyLoss(Layer):
     A multi-cross-entropy loss layer, with Softmax layer in it, which could be cancelled by method cancel_softmax
     """
     def __init__(self, model = None, max_classes = 10) -> None:
-        pass
+        
+        self.model = model
+        self.max_classes = max_classes
+        self.has_softmax = True
+        self.loss = None
+        self.logits = None
+        self.labels = None
+
 
     def __call__(self, predicts, labels):
         return self.forward(predicts, labels)
@@ -180,11 +187,24 @@ class MultiCrossEntropyLoss(Layer):
         This function generates the loss.
         """
         # / ---- your codes here ----/
-        pass
+        if self.has_softmax:
+            exp_p = np.exp(predicts)
+            logits = exp_p/exp_p.sum(axis=1, keepdims=True)
+        else:
+            logits = predicts
+        # compute the corss entropy loss
+        loss = -np.log(logits[np.arange(logits.shape[0]), labels])
+        self.loss = loss
+        self.logits = logits
+        self.labels = labels
+        return loss.mean()
+        
     
     def backward(self):
         # first compute the grads from the loss to the input
         # / ---- your codes here ----/
+        self.grads = self.logits.copy()
+        self.grads[np.arange(self.logits.shape[0]), self.labels] -= 1
         # Then send the grads to model for back propagation
         self.model.backward(self.grads)
 
