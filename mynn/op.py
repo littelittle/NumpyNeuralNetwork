@@ -9,6 +9,9 @@ class Layer():
     def forward():
         pass
 
+    def __str__(self):
+        return "An Unspecified Layer"
+
     @abstractmethod
     def backward():
         pass
@@ -33,6 +36,9 @@ class Linear(Layer):
     
     def __call__(self, X) -> np.ndarray:
         return self.forward(X)
+    
+    def __str__(self):
+        return f"A Linear Layer With Size {self.W.shape}"
 
     def forward(self, X):
         """
@@ -48,12 +54,18 @@ class Linear(Layer):
         output: [batch_size, in_dim] the grad to be passed to the previous layer.
         This function also calculates the grads for W and b.
         """
-        W_grad = np.einsum('ij,ik->ijk', grad, self.input)
+        W_grad = np.einsum('ij,ik->ijk', grad, self.input).transpose((0, 2, 1))
         if np.any(np.isnan(W_grad)):
-            print(grad,self.input)
+            print(f"grad is:\n {grad} \n")
+            print(f"self.input is: \n {self.input} \n")
             raise ValueError("backward trouble!")
         b_grad = grad
-        self.grads['W'] = np.mean(np.transpose(W_grad,(0, 2, 1)), axis=0) # average the grads along the batchsize channel
+
+        # if self.weight_decay:
+        #     W_grad += self.weight_decay_lambda*self.W
+        #     b_grad += self.weight_decay_lambda*self.b
+
+        self.grads['W'] = np.mean(W_grad, axis=0) # average the grads along the batchsize channel
         self.grads['b'] = np.mean(b_grad, axis=0)
         passing_grad = grad@np.transpose(self.W, (1, 0)) # (batchsize, outdim)@(outdim, indim)
         return passing_grad
@@ -77,8 +89,14 @@ class Conv2D(Layer):
         self.grads = {'kernel': None, 'b': None} 
         self.params = {'kernel': self.kernel, 'b': self.b}
 
+        self.weight_decay = weight_decay
+        self.weight_decay_lambda = weight_decay_lambda
+
     def __call__(self, X:np.ndarray) -> np.ndarray:
         return self.forward(X)
+    
+    def __str__(self):
+        return f"A Conv2d Layer with fan_in:{self.in_channels}, fan_out:{self.out_channels}, kernel_size:{self.kernel_size}"
     
     def forward(self, X:np.ndarray):
         """
@@ -133,13 +151,67 @@ class Conv2D(Layer):
                     self.kernel.reshape(self.out_channels, -1) # (out_channel, in*k*k)
                 ).reshape(batchsize, self.in_channels, self.kernel_size, self.kernel_size) # (bs, inchannel, k, k)
         
-        self.grads['kernel'] = kernel_grad
-        self.grads['b'] = bias_grad
-        return passing_grad
+        # remember to normalize!!! and add weight decay
+        self.grads['kernel'] = kernel_grad/(new_H*new_W*batchsize) # if not self.weight_decay else kernel_grad/(new_H*new_W*batchsize)+self.weight_decay_lambda*self.kernel
+        self.grads['b'] = bias_grad/(new_H*new_W) # if not self.weight_decay else bias_grad/(new_H*new_W)+self.weight_decay_lambda*self.b
+        return passing_grad/(new_H*new_W)
 
     def clear_grad(self):
-        self.grads = {'kernel':None}
+        self.grads = {'kernel':None, 'b':None}
+
+class MaxPool(Layer):
+    """
+    Max Pooling Layer
+    """
+    def __init__(self, kernel_size) -> None:
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.inputshape = None
+        self.optimizable = False
+    
+    def __call__(self, X):
+        return self.forward(X)
+    
+    def __str__(self):
+        return "A Max Pooling"
+    
+    def forward(self, X):
+        """
+        (F,W,H) -> (F,W//k,H//k)
+        """
+        B, C, H, W = self.inputshape = X.shape
+        H_out, W_out = H//self.kernel_size, W//self.kernel_size
+        output = np.zeros((B, C, H_out, W_out))
+
+        self.max_row = np.zeros((B, C, H_out, W_out), dtype=int)
+        self.max_col = np.zeros((B, C, H_out, W_out), dtype=int)
+
+        for i in range(0, H-self.kernel_size+1, self.kernel_size):
+            for j in range(0, W-self.kernel_size+1, self.kernel_size):
+                window = X[:,:,i:i+self.kernel_size,j:j+self.kernel_size]
+                flat_window = window.reshape(B, C, -1)
+                max_idx = np.argmax(flat_window, axis=-1)
+                di = max_idx // self.kernel_size
+                dj = max_idx % self.kernel_size
+                self.max_row[:, :, i//self.kernel_size, j//self.kernel_size] = di
+                self.max_col[:, :, i//self.kernel_size, j//self.kernel_size] = dj
+                output[:, :, i//self.kernel_size, j//self.kernel_size] = np.max(window, axis=(-2, -1))   
+
+        return output
+    
+    def backward(self, grads):
+        """
+        (B,C,W//k,H//k) -> (B,C,W,H)
+        """
+        grad_X = np.zeros(self.inputshape)
+        n, c, i_out, j_out = np.indices(grads.shape)
+        row_indices = i_out*self.kernel_size+self.max_row
+        col_indices = j_out*self.kernel_size+self.max_col
+        grad_X[n, c, row_indices, col_indices] = grads
+
+        return grad_X
         
+
 class ReLU(Layer):
     """
     An activation layer.
@@ -152,6 +224,9 @@ class ReLU(Layer):
 
     def __call__(self, X):
         return self.forward(X)
+    
+    def __str__(self):
+        return "A Relu"
 
     def forward(self, X):
         self.input = X
@@ -167,13 +242,13 @@ class MultiCrossEntropyLoss(Layer):
     """
     A multi-cross-entropy loss layer, with Softmax layer in it, which could be cancelled by method cancel_softmax
     """
-    def __init__(self, model = None, max_classes = 10) -> None:
+    def __init__(self, model = None, max_classes = 10, tempra = 0.01) -> None:
         
         self.model = model
         self.max_classes = max_classes
         self.has_softmax = True
         self.loss = None
-        self.logits = None
+        self.possibility = None
         self.labels = None
 
 
@@ -189,13 +264,14 @@ class MultiCrossEntropyLoss(Layer):
         # / ---- your codes here ----/
         if self.has_softmax:
             exp_p = np.exp(predicts)
-            logits = exp_p/exp_p.sum(axis=1, keepdims=True)
+            possibility = exp_p/exp_p.sum(axis=1, keepdims=True)
         else:
-            logits = predicts
+            possibility = predicts
+        # import ipdb; ipdb.set_trace()
         # compute the corss entropy loss
-        loss = -np.log(logits[np.arange(logits.shape[0]), labels])
+        loss = -predicts[np.arange(predicts.shape[0]), labels] + np.log(exp_p.sum(axis=1, keepdims=True)) # KEY NOTE! need to seperate to prevent Inf!!!
         self.loss = loss
-        self.logits = logits
+        self.possibility = possibility
         self.labels = labels
         return loss.mean()
         
@@ -203,8 +279,13 @@ class MultiCrossEntropyLoss(Layer):
     def backward(self):
         # first compute the grads from the loss to the input
         # / ---- your codes here ----/
-        self.grads = self.logits.copy()
-        self.grads[np.arange(self.logits.shape[0]), self.labels] -= 1
+        # print(self.possibility)
+        self.grads = self.possibility.copy()
+        self.grads[np.arange(self.possibility.shape[0]), self.labels] -= 1
+        # import ipdb; ipdb.set_trace()
+
+        # print(self.grads)
+        # print(self.grads.shape)
         # Then send the grads to model for back propagation
         self.model.backward(self.grads)
 

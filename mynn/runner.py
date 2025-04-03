@@ -63,6 +63,8 @@ class RunnerM():
                 self.dev_scores.append(dev_score)
                 self.dev_loss.append(dev_loss)
 
+                # import ipdb; ipdb.set_trace()
+
                 if (iteration) % log_iters == 0:
                     print(f"epoch: {epoch}, iteration: {iteration}")
                     print(f"[Train] loss: {trn_loss}, score: {trn_score}")
