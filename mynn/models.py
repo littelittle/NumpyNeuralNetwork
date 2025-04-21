@@ -94,6 +94,7 @@ class Model_CNN(Layer):
     def __init__(self, size_list=None, act_func=None, lambda_list=None, debug=False):
         self.size_list = size_list
         self.act_func = act_func
+        self.lambda_list = lambda_list.copy() if lambda_list is not None else None
 
         if size_list is not None and act_func is not None:
             self.layers = []
@@ -155,7 +156,40 @@ class Model_CNN(Layer):
         return grads
     
     def load_model(self, param_list):
-        pass
+        with open(param_list, 'rb') as f:
+            param_list = pickle.load(f)
+        self.size_list = param_list[0]
+        self.act_func = param_list[1]
+        self.lambda_list = param_list[2]
+        self.dev_score = param_list[3]
+        i = 1
+        for layer in self.layers:
+            if layer.optimizable:
+                i += 1
+                if layer.__class__.__name__ == "Linear":
+                    layer.W = param_list[i + 2]['W']
+                    layer.b = param_list[i + 2]['b']
+                    layer.params['W'] = layer.W
+                    layer.params['b'] = layer.b
+                    layer.weight_decay = param_list[i + 2]['weight_decay']
+                    layer.weight_decay_lambda = param_list[i+2]['lambda']
+                elif layer.__class__.__name__ == "Conv2D":
+                    layer.kernel = param_list[i + 2]['kernel']
+                    layer.b = param_list[i + 2]['b']
+                    layer.params['kernel'] = layer.kernel
+                    layer.params['b'] = layer.b
+                    layer.weight_decay = param_list[i + 2]['weight_decay']
+                    layer.weight_decay_lambda = param_list[i+2]['lambda']
         
-    def save_model(self, save_path):
-        pass
+        
+    def save_model(self, save_path, dev_score=0):
+        param_list = [self.size_list, self.act_func, self.lambda_list, dev_score]
+        for layer in self.layers:
+            if layer.optimizable:
+                if layer.__class__.__name__ == "Linear":
+                    param_list.append({'W' : layer.params['W'], 'b' : layer.params['b'], 'weight_decay' : layer.weight_decay, 'lambda' : layer.weight_decay_lambda})
+                elif layer.__class__.__name__ == "Conv2D":
+                    param_list.append({'kernel' : layer.params['kernel'], 'b' : layer.params['b'], 'weight_decay' : layer.weight_decay, 'lambda' : layer.weight_decay_lambda})
+        
+        with open(save_path, 'wb') as f:
+            pickle.dump(param_list, f)

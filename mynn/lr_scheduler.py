@@ -12,6 +12,9 @@ class scheduler():
 
 
 class StepLR(scheduler):
+    '''
+    for every step_size epochs, the learning rate will be multiplied by gamma
+    '''
     def __init__(self, optimizer, step_size=30, gamma=0.1) -> None:
         super().__init__(optimizer)
         self.step_size = step_size

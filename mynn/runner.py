@@ -30,7 +30,11 @@ class RunnerM():
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
-        best_score = 0
+        if os.path.exists(os.path.join(save_dir, 'best_model.pickle')):
+            print("load the best model from the last training")
+            self.model.load_model(os.path.join(save_dir, 'best_model.pickle'))
+
+        best_score = self.model.dev_score if hasattr(self.model, 'dev_score') else 0.0
 
         for epoch in range(num_epochs):
             X, y = train_set
@@ -38,7 +42,6 @@ class RunnerM():
             assert X.shape[0] == y.shape[0]
 
             idx = np.random.permutation(range(X.shape[0]))
-
             X = X[idx]
             y = y[idx]
 
@@ -62,8 +65,6 @@ class RunnerM():
                 # print(f"backward_cost is {backward_finish_time-forward_finish_time}")
 
                 self.optimizer.step()
-                if self.scheduler is not None:
-                    self.scheduler.step()
                 # print(f"optimize time is {time.time()-backward_finish_time}")
                 
                 # import ipdb; ipdb.set_trace()
@@ -76,9 +77,13 @@ class RunnerM():
                     print(f"[Train] loss: {trn_loss}, score: {trn_score}")
                     print(f"[Dev] loss: {dev_loss}, score: {dev_score}")
 
+            # for every epoch, test if it is need to decrease the learning rate
+            if self.scheduler is not None:
+                self.scheduler.step()
+
             if dev_score > best_score:
                 save_path = os.path.join(save_dir, 'best_model.pickle')
-                self.save_model(save_path)
+                self.save_model(save_path, dev_score)
                 print(f"best accuracy performence has been updated: {best_score:.5f} --> {dev_score:.5f}")
                 best_score = dev_score
         self.best_score = best_score
@@ -90,5 +95,5 @@ class RunnerM():
         score = self.metric(logits, y)
         return score, loss
     
-    def save_model(self, save_path):
-        self.model.save_model(save_path)
+    def save_model(self, save_path, dev_score):
+        self.model.save_model(save_path, dev_score)
