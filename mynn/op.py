@@ -42,7 +42,7 @@ class Linear(Layer):
 
     def forward(self, X):
         """
-        input: [batch_size, in_dim]
+        input: [batch_size, in_dim] 
         out: [batch_size, out_dim]
         """
         self.input = X
@@ -88,6 +88,7 @@ class Conv2D(Layer):
         self.inputs = None # record the input every time after forward
         self.grads = {'kernel': None, 'b': None} 
         self.params = {'kernel': self.kernel, 'b': self.b}
+        self.optimizable = True
 
         self.weight_decay = weight_decay
         self.weight_decay_lambda = weight_decay_lambda
@@ -173,7 +174,7 @@ class MaxPool(Layer):
         return self.forward(X)
     
     def __str__(self):
-        return "A Max Pooling"
+        return f"A Max Pooling with kernel size:{self.kernel_size}"
     
     def forward(self, X):
         """
@@ -211,7 +212,29 @@ class MaxPool(Layer):
 
         return grad_X
         
+class Reshape(Layer):
+    """
+    reshape c,h,w to f
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        self.input = None
 
+        self.optimizable =False
+    
+    def __call__(self, X):
+        return self.forward(X)
+    
+    def __str__(self):
+        return "A reshape layer"
+    
+    def forward(self, X):
+        self.inputshape = X.shape
+        return X.reshape(self.inputshape[0], -1) # B,C,H,W->B,f
+    
+    def backward(self, grad):
+        return grad.reshape(self.inputshape)
+         
 class ReLU(Layer):
     """
     An activation layer.

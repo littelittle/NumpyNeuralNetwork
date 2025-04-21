@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from tqdm import tqdm
+import time
 
 class RunnerM():
     """
@@ -41,11 +42,14 @@ class RunnerM():
             X = X[idx]
             y = y[idx]
 
-            for iteration in range(int(X.shape[0] / self.batch_size) + 1):
+            for iteration in tqdm(range(int(X.shape[0] / self.batch_size) + 1), desc="iter in an epoch"):
                 train_X = X[iteration * self.batch_size : (iteration+1) * self.batch_size]
                 train_y = y[iteration * self.batch_size : (iteration+1) * self.batch_size]
 
+                # iter_start_time = time.time()
                 logits = self.model(train_X)
+                # forward_finish_time = time.time()
+                # print(f"forward_cost is {forward_finish_time-iter_start_time}")
                 trn_loss = self.loss_fn(logits, train_y)
                 self.train_loss.append(trn_loss)
                 
@@ -54,18 +58,20 @@ class RunnerM():
 
                 # the loss_fn layer will propagate the gradients.
                 self.loss_fn.backward()
+                # backward_finish_time = time.time()
+                # print(f"backward_cost is {backward_finish_time-forward_finish_time}")
 
                 self.optimizer.step()
                 if self.scheduler is not None:
                     self.scheduler.step()
+                # print(f"optimize time is {time.time()-backward_finish_time}")
                 
-                dev_score, dev_loss = self.evaluate(dev_set)
-                self.dev_scores.append(dev_score)
-                self.dev_loss.append(dev_loss)
-
                 # import ipdb; ipdb.set_trace()
 
                 if (iteration) % log_iters == 0:
+                    dev_score, dev_loss = self.evaluate(dev_set)
+                    self.dev_scores.append(dev_score)
+                    self.dev_loss.append(dev_loss)
                     print(f"epoch: {epoch}, iteration: {iteration}")
                     print(f"[Train] loss: {trn_loss}, score: {trn_score}")
                     print(f"[Dev] loss: {dev_loss}, score: {dev_score}")

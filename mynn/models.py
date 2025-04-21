@@ -2,6 +2,7 @@ from .op import *
 from .init_method import *
 import pickle
 import sys
+from .time_detector import *
 
 class Model_MLP(Layer):
     """
@@ -28,6 +29,11 @@ class Model_MLP(Layer):
 
     def __call__(self, X):
         return self.forward(X)
+    
+    def __str__(self):
+        return f"""A MLP Model With Whose Sublayer is as below:
+                    {[layer.__str__()  for layer in self.layers]}
+                """
 
     def forward(self, X):
         assert self.size_list is not None and self.act_func is not None, 'Model has not initialized yet. Use model.load_model to load a model or create a new model with size_list and act_func offered.'
@@ -85,27 +91,42 @@ class Model_CNN(Layer):
     """
     A model with conv2D layers. Implement it using the operators you have written in op.py
     """
-    def __init__(self, size_list=None, act_func=None, lambda_list=None):
+    def __init__(self, size_list=None, act_func=None, lambda_list=None, debug=False):
         self.size_list = size_list
         self.act_func = act_func
 
         if size_list is not None and act_func is not None:
             self.layers = []
             for i, size in enumerate(size_list):
+                append_activate = False
+                if size == "reshape":
+                    layer = Reshape()
+                    append_activate = False
                 if len(size)==3:
                     layer = Conv2D(in_channels=size[0], out_channels=size[1], kernel_size=size[2], initialize_method=Xavier_init)
+                    append_activate = False
                 elif len(size)==2:
                     layer = Linear(in_dim=size[0], out_dim=size[1], initialize_method=Xavier_init)
-                if lambda_list is not None:
+                    append_activate = True
+                elif len(size)==1:
+                    # in this case, it is just the max pool layer specified with the kernel size
+                    layer = MaxPool(kernel_size=size[0])
+                    append_activate = True
+                if lambda_list is not None and layer.optimizable:
                     layer.weight_decay = True
-                    layer.weight_decay_lambda = lambda_list[i]
+                    layer.weight_decay_lambda = lambda_list.pop(0)
                 if act_func == 'Logistic':
                     raise NotImplementedError
                 elif act_func == 'ReLU':
                     layer_f = ReLU()
                 self.layers.append(layer)
-                if i < len(size_list) - 2:
+                if i < len(size_list) - 1 and append_activate:
                     self.layers.append(layer_f)
+
+        if debug:
+            for layer in self.layers:
+                layer.forward = timing_decorator(layer.forward)
+                layer.backward = timing_decorator(layer.backward)
 
     def __call__(self, X):
         return self.forward(X)
@@ -116,10 +137,22 @@ class Model_CNN(Layer):
                 """
 
     def forward(self, X):
-        pass
+        assert self.size_list is not None and self.act_func is not None, 'Model has not initialized yet. Use model.load_model to load a model or create a new model with size_list and act_func offered.'
+        outputs = X.reshape(-1, 1, 28, 28)
+        for layer in self.layers:
+            outputs = layer(outputs)
+        return outputs
 
     def backward(self, loss_grad):
-        pass
+        grads = loss_grad
+        # import ipdb; ipdb.set_trace()
+        try:
+            for i, layer in enumerate(reversed(self.layers)):
+                grads = layer.backward(grads)
+        except ValueError:
+            print(f"there is nan in layer{i}\nwhose in/out size is {layer.W.shape}!")
+            sys.exit(0)
+        return grads
     
     def load_model(self, param_list):
         pass
