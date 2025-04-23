@@ -40,12 +40,12 @@ train_imgs = train_imgs / train_imgs.max()
 valid_imgs = valid_imgs / valid_imgs.max()
 
 linear_model = nn.models.Model_MLP([train_imgs.shape[-1], 600, 10], 'ReLU', [1e-4, 1e-4]) # weight decay [1e-4, 1e-4] not added ,600,
-conv_model = nn.models.Model_CNN([(1, 6, 5), (2,), (6, 16, 5), (2,),("reshape"),(16*4*4, 120),(120, 84), (84, 10)], "ReLU", [1e-4, 1e-4, 1e-4, 1e-4, 1e-4])
+conv_model = nn.models.Model_CNN([(1, 6, 5), (2,), (6, 16, 5), (2,),("reshape"),(16*5*5, 120),(120, 84), (84, 10)], "ReLU", [1e-4, 1e-4, 1e-4, 1e-4, 1e-4])
 
 model = conv_model
 
 SGD_optimizer = nn.optimizer.SGD(init_lr=0.06, model=model)
-Momentum_optimizer = nn.optimizer.MomentGD(init_lr=0.006, model=model, mu=0.9) # 1/(1-mu) of SGD
+Momentum_optimizer = nn.optimizer.MomentGD(init_lr=0.001, model=model, mu=0.9) # 1/(1-mu) of SGD
 optimizer = Momentum_optimizer
 
 scheduler = nn.lr_scheduler.MultiStepLR(optimizer=optimizer, milestones=[1, 2, 3], gamma=0.5)
@@ -53,7 +53,7 @@ loss_fn = nn.op.MultiCrossEntropyLoss(model=model, max_classes=train_labs.max()+
 
 runner = nn.runner.RunnerM(model, optimizer, nn.metric.accuracy, loss_fn, scheduler=scheduler)
 
-runner.train([train_imgs, train_labs], [valid_imgs, valid_labs], num_epochs=3, log_iters=100, save_dir=r'./best_models')
+runner.train([train_imgs, train_labs], [valid_imgs, valid_labs], num_epochs=20, log_iters=100, save_dir=r'./best_models_with_padding')
 
 _, axes = plt.subplots(1, 2)
 axes.reshape(-1)

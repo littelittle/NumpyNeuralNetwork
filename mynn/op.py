@@ -77,7 +77,7 @@ class Conv2D(Layer):
     """
     The 2D convolutional layer. Try to implement it on your own.
     """
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, initialize_method=np.random.normal, weight_decay=False, weight_decay_lambda=1e-8) -> None:
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=1, initialize_method=np.random.normal, weight_decay=False, weight_decay_lambda=1e-8) -> None:
         self.kernel = initialize_method(size=(out_channels, in_channels, kernel_size, kernel_size))
         self.b = initialize_method(size=(out_channels,))
         self.out_channels = out_channels
@@ -112,6 +112,10 @@ class Conv2D(Layer):
         new_W = (W-self.kernel_size+self.padding*2)//self.stride + 1
         # initialize the output
         output = np.zeros((batchsize, self.out_channels, new_H, new_W))
+        # add the padding part
+        # import ipdb; ipdb.set_trace()
+        if self.padding > 0:
+            X = np.pad(X, ((0,0), (0,0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant')  
         # start the for loop:
         for i in range(new_H):
             for j in range(new_W):
@@ -152,6 +156,10 @@ class Conv2D(Layer):
                     self.kernel.reshape(self.out_channels, -1) # (out_channel, in*k*k)
                 ).reshape(batchsize, self.in_channels, self.kernel_size, self.kernel_size) # (bs, inchannel, k, k)
         
+        # crop the passing_grad to the original size
+        if self.padding > 0:
+            passing_grad = passing_grad[:, :, self.padding:-self.padding, self.padding:-self.padding]
+
         # remember to normalize!!! and add weight decay
         self.grads['kernel'] = kernel_grad/(new_H*new_W*batchsize) # if not self.weight_decay else kernel_grad/(new_H*new_W*batchsize)+self.weight_decay_lambda*self.kernel
         self.grads['b'] = bias_grad/(new_H*new_W) # if not self.weight_decay else bias_grad/(new_H*new_W)+self.weight_decay_lambda*self.b

@@ -104,7 +104,7 @@ class Model_CNN(Layer):
                     layer = Reshape()
                     append_activate = False
                 if len(size)==3:
-                    layer = Conv2D(in_channels=size[0], out_channels=size[1], kernel_size=size[2], initialize_method=Xavier_init)
+                    layer = Conv2D(in_channels=size[0], out_channels=size[1], kernel_size=size[2], initialize_method=Xavier_init, padding=1)
                     append_activate = False
                 elif len(size)==2:
                     layer = Linear(in_dim=size[0], out_dim=size[1], initialize_method=Xavier_init)
