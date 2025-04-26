@@ -4,28 +4,63 @@ import pickle
 import sys
 from .time_detector import *
 
+class ModelRegister:
+    '''
+    Register the model according to the model name. 
+    '''
+    _registered_models = {}
+
+    @classmethod
+    def register(cls, name):
+        def inner_wrapper(model_cls):
+            if name in cls._registered_models:
+                raise ValueError(f"Model {name} is already registered.")
+            cls._registered_models[name] = model_cls
+            return model_cls
+        return inner_wrapper
+    
+    @classmethod
+    def get_model(cls, name, config):
+        '''
+        the config part should include size_list, act_func and lambda_list.
+        '''
+        model_cls = cls._registry.get(name)
+        if model_cls is None:
+            raise ValueError(f"No model found with name '{name}'. "
+                             f"Available models: {list(cls._registry.keys())}")
+        assert len(config) <= model_cls.__init__.__code__.co_argcount - 1, f"Model {name} requires {model_cls.__init__.__code__.co_argcount - 1} arguments, but got {len(config)}."
+        return model_cls(*config)
+
+model_register = ModelRegister()
+
+@model_register.register('MLP')
 class Model_MLP(Layer):
     """
     A model with linear layers. We provied you with this example about a structure of a model.
     """
-    def __init__(self, size_list=None, act_func=None, lambda_list=None):
+    def __init__(self, size_list=None, act_func=None, lambda_list=None, dropout=False):
         self.size_list = size_list
         self.act_func = act_func
+        self.status = {'train':True, 'dropout':dropout}
 
         if size_list is not None and act_func is not None:
             self.layers = []
             for i in range(len(size_list) - 1):
-                layer = Linear(in_dim=size_list[i], out_dim=size_list[i + 1], initialize_method=Xavier_init)
-                if lambda_list is not None:
-                    layer.weight_decay = True
-                    layer.weight_decay_lambda = lambda_list[i]
-                if act_func == 'Logistic':
-                    raise NotImplementedError
-                elif act_func == 'ReLU':
-                    layer_f = ReLU()
-                self.layers.append(layer)
-                if i < len(size_list) - 2:
-                    self.layers.append(layer_f)
+                if i==1 and self.status['dropout']: # add the dropout layer after the second layer
+                    layer = Dropout(status=self.status, p=0.5)
+                    self.layers.append(layer)
+                else:
+                    layer = Linear(in_dim=size_list[i], out_dim=size_list[i + 1], initialize_method=Xavier_init)
+                    if lambda_list is not None:
+                        layer.weight_decay = True
+                        layer.weight_decay_lambda = lambda_list[i]
+                    if act_func == 'Logistic':
+                        raise NotImplementedError
+                    elif act_func == 'ReLU':
+                        layer_f = ReLU()
+                    self.layers.append(layer)
+                    if i < len(size_list) - 2:
+                        self.layers.append(layer_f)
 
     def __call__(self, X):
         return self.forward(X)
@@ -34,6 +69,24 @@ class Model_MLP(Layer):
         return f"""A MLP Model With Whose Sublayer is as below:
                     {[layer.__str__()  for layer in self.layers]}
                 """
+    def eval(self, verbose=False):
+        if verbose:
+            print("\nModel is in eval mode.")
+        self.status['train'] = False
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.status['train'] = True  # Revert to training mode
+        print("Model is exiting eval mode.")
+        return False  # Don't suppress exceptions
+
+    def train(self, verbose=False):
+        if verbose:
+            print("Model is in train mode.")
+        self.status['train'] = True
 
     def forward(self, X):
         assert self.size_list is not None and self.act_func is not None, 'Model has not initialized yet. Use model.load_model to load a model or create a new model with size_list and act_func offered.'
@@ -87,6 +140,7 @@ class Model_MLP(Layer):
             pickle.dump(param_list, f)
         
 
+@model_register.register('CNN')
 class Model_CNN(Layer):
     """
     A model with conv2D layers. Implement it using the operators you have written in op.py
@@ -95,6 +149,7 @@ class Model_CNN(Layer):
         self.size_list = size_list
         self.act_func = act_func
         self.lambda_list = lambda_list.copy() if lambda_list is not None else None
+        self.status = {'train':True, 'dropout':False}
 
         if size_list is not None and act_func is not None:
             self.layers = []
@@ -104,7 +159,7 @@ class Model_CNN(Layer):
                     layer = Reshape()
                     append_activate = False
                 if len(size)==3:
-                    layer = Conv2D(in_channels=size[0], out_channels=size[1], kernel_size=size[2], initialize_method=Xavier_init, padding=1)
+                    layer = Conv2D(in_channels=size[0], out_channels=size[1], kernel_size=size[2], initialize_method=Xavier_init, padding=1, status=self.status)
                     append_activate = False
                 elif len(size)==2:
                     layer = Linear(in_dim=size[0], out_dim=size[1], initialize_method=Xavier_init)
@@ -136,6 +191,25 @@ class Model_CNN(Layer):
         return f"""A CNN Model With Whose Sublayer is as below:
                     {[layer.__str__()  for layer in self.layers]}
                 """
+
+    def eval(self, verbose=False):
+        if verbose:
+            print("\nModel is in eval mode.")
+        self.status['train'] = False
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.status['train'] = True  # Revert to training mode
+        print("Model is exiting eval mode.")
+        return False  # Don't suppress exceptions
+
+    def train(self, verbose=False):
+        if verbose:
+            print("Model is in train mode.")
+        self.status['train'] = True
 
     def forward(self, X):
         assert self.size_list is not None and self.act_func is not None, 'Model has not initialized yet. Use model.load_model to load a model or create a new model with size_list and act_func offered.'

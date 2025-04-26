@@ -77,7 +77,7 @@ class Conv2D(Layer):
     """
     The 2D convolutional layer. Try to implement it on your own.
     """
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=1, initialize_method=np.random.normal, weight_decay=False, weight_decay_lambda=1e-8) -> None:
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=1, status={}, initialize_method=np.random.normal, weight_decay=False, weight_decay_lambda=1e-8) -> None:
         self.kernel = initialize_method(size=(out_channels, in_channels, kernel_size, kernel_size))
         self.b = initialize_method(size=(out_channels,))
         self.out_channels = out_channels
@@ -89,6 +89,7 @@ class Conv2D(Layer):
         self.grads = {'kernel': None, 'b': None} 
         self.params = {'kernel': self.kernel, 'b': self.b}
         self.optimizable = True
+        self.status = status # a dict to record the status of the model, like train or eval
 
         self.weight_decay = weight_decay
         self.weight_decay_lambda = weight_decay_lambda
@@ -127,7 +128,8 @@ class Conv2D(Layer):
                     X[:, :, i*self.stride:i*self.stride+self.kernel_size, j*self.stride:j*self.stride+self.kernel_size].reshape(batchsize, -1),
                     self.kernel.reshape(self.out_channels, -1).transpose(1, 0)
                 ) + self.b
-        self.inputs = X
+        if self.status.get('train', False):
+            self.inputs = X # only record the input when training
         return output
 
     def backward(self, grads:np.ndarray):
@@ -329,6 +331,34 @@ class L2Regularization(Layer):
     L2 Reg can act as weight decay that can be implemented in class Linear.
     """
     pass
+
+class Dropout(Layer):
+    """
+    Dropout layer.
+    """
+    def __init__(self, status, p=0.5) -> None:
+        super().__init__()
+        self.p = p
+        self.mask = None
+        self.optimizable = False
+        self.status = status
+    
+    def __call__(self, X):
+        return self.forward(X)
+    
+    def __str__(self):
+        return f"A Dropout Layer with p:{self.p}"
+    
+    def forward(self, X):
+        if self.status['train']:
+            # import ipdb; ipdb.set_trace()
+            self.mask = np.random.binomial(1, 1-self.p, size=X.shape) / (1-self.p)
+            return X * self.mask
+        else:
+            return X
+    
+    def backward(self, grads):
+        return grads * self.mask
        
 def softmax(X):
     x_max = np.max(X, axis=1, keepdims=True)
