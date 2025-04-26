@@ -5,8 +5,11 @@ import gzip
 import matplotlib.pyplot as plt
 import pickle
 
-model = nn.models.Model_MLP()
-model.load_model(r'.\saved_models\best_model_1.pickle')
+# model = nn.models.Model_MLP()
+# model.load_model(r'.\saved_models\best_model_1.pickle')
+# NOTE: this model weight is only optimized on the 50000 training samples, not on the 10000 validation samples.
+model = nn.models.Model_CNN([(1, 6, 5), (2,), (6, 16, 5), (2,),("reshape"),(16*5*5, 120),(120, 84), (84, 10)], "ReLU", [1e-4, 1e-4, 1e-4, 1e-4, 1e-4])
+model.load_model(r'.\best_models_with_padding\best_model.pickle')
 
 test_images_path = r'.\dataset\MNIST\t10k-images-idx3-ubyte.gz'
 test_labels_path = r'.\dataset\MNIST\t10k-labels-idx1-ubyte.gz'

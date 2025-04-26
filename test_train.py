@@ -59,7 +59,7 @@ def train_model():
 
         runner = nn.runner.RunnerM(model, optimizer, nn.metric.accuracy, loss_fn, scheduler=scheduler)
 
-        runner.train([train_imgs, train_labs], [valid_imgs, valid_labs], num_epochs=20, log_iters=100, save_dir=r'./best_models_with_padding', data_augmentation=True)
+        runner.train([train_imgs, train_labs], [valid_imgs, valid_labs], num_epochs=20, log_iters=100, save_dir=r'./best_models_with_padding', data_augmentation=False)
 
         _, axes = plt.subplots(1, 2)
         axes.reshape(-1)
